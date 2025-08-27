@@ -17,11 +17,25 @@ public final class AnthropicClientFactory {
 
     private AnthropicClientFactory() {}
 
+    
+
     public static AnthropicClient create() {
-        String apiKey = loadApiKey();
+       
         return AnthropicOkHttpClient.builder()
-                .apiKey(apiKey)
+                .apiKey(resolveApiKey())
                 .build();
+    }
+
+    /** Returns the API key from env/system properties, or falls back to the default embedded key. */
+    public static String resolveApiKey() {
+        String key = System.getenv("ANTHROPIC_API_KEY");
+        if (key == null || key.isBlank()) {
+            key = System.getProperty("ANTHROPIC_API_KEY");
+        }
+        if (key == null || key.isBlank()) {
+            key = System.getProperty("anthropic.api.key");
+        }
+        return key.trim();
     }
 
     public static String loadApiKey() {

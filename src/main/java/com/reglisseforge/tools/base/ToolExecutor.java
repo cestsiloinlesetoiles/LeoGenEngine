@@ -110,7 +110,7 @@ public class ToolExecutor {
         }
         
         try {
-            // Types primitifs
+            // Primitive types
             if (targetType == String.class) {
                 return value.toString();
             } else if (targetType == int.class || targetType == Integer.class) {
@@ -125,21 +125,21 @@ public class ToolExecutor {
                 return Boolean.parseBoolean(value.toString());
             }
             
-            // Collections et Maps - utilisation de Jackson pour conversion
+            // Collections and Maps - using Jackson for conversion
             else if (List.class.isAssignableFrom(targetType)) {
                 return objectMapper.convertValue(value, List.class);
             } else if (Map.class.isAssignableFrom(targetType)) {
                 return objectMapper.convertValue(value, Map.class);
             }
             
-            // Objets complexes - conversion intelligente comme Pydantic
+            // Complex objects - intelligent conversion like Pydantic
             else if (!targetType.isPrimitive()) {
-                logger.debug("Tentative de conversion vers: {}", targetType.getSimpleName());
+                logger.debug("Attempting conversion to: {}", targetType.getSimpleName());
                 return convertToCustomObject(value, targetType);
             }
             
         } catch (Exception e) {
-            logger.error("Impossible de convertir '{}' vers {}: {}", 
+            logger.error("Unable to convert '{}' to {}: {}", 
                         value, targetType.getSimpleName(), e.getMessage());
             throw new IllegalArgumentException("Cannot convert value '" + value + 
                                              "' to " + targetType.getSimpleName(), e);

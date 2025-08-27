@@ -1,4 +1,4 @@
-package com.reglisseforge.utils;
+package com.reglisseforge.agent;
 
 import com.anthropic.models.messages.RawMessageStreamEvent;
 import java.util.function.Consumer;
@@ -15,7 +15,7 @@ public final class StreamTextAccumulator {
         this.chunkConsumer = chunkConsumer;
     }
 
-    /** Appelé pour chaque chunk d'événement */
+    /** Called for each event chunk */
     public void onEvent(RawMessageStreamEvent event) {
         event.contentBlockDelta().stream()
             .flatMap(d -> d.delta().text().stream())
@@ -23,7 +23,7 @@ public final class StreamTextAccumulator {
                 String text = textBlock.text();
                 buf.append(text);
                 
-                // Émettre le chunk tel quel si un consumer est configuré
+                // Emit the chunk as is if a consumer is configured
                 if (chunkConsumer != null) {
                     chunkConsumer.accept(text);
                 }

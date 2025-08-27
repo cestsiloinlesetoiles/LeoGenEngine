@@ -125,7 +125,7 @@ public class ToolRegistry {
     }
 
     private String getJsonType(Class<?> type) {
-        // Types primitifs et wrappers
+        // Primitive types and wrappers
         if (type == String.class) return "string";
         if (type == int.class || type == Integer.class) return "integer";
         if (type == long.class || type == Long.class) return "integer";
@@ -137,17 +137,17 @@ public class ToolRegistry {
         if (List.class.isAssignableFrom(type)) return "array";
         if (type.isArray()) return "array";
         
-        // Map et objets complexes
+        // Map and complex objects
         if (Map.class.isAssignableFrom(type)) return "object";
         
-        // Autres objets complexes (seront traités comme string JSON)
+        // Other complex objects (will be treated as JSON string)
         if (!type.isPrimitive() && type != String.class) {
-            logger.warn("Type complexe détecté: {} - sera traité comme 'object'. Considérez utiliser String JSON.", 
+            logger.warn("Complex type detected: {} - will be treated as 'object'. Consider using JSON String.", 
                        type.getSimpleName());
             return "object";
         }
         
-        return "string"; // Défaut pour tout le reste
+        return "string"; // Default for everything else
     }
 
     public ToolInfo getTool(String name) {

@@ -6,18 +6,26 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.reglisseforge.tools.base.Param;
+import com.reglisseforge.tools.base.Tool;
+
 public class FileEditorTool {
 
     /**
-     * Remplace une plage de lignes dans un fichier par un contenu donné.
+     * Replaces a range of lines in a file with given content.
      *
-     * @param filePath   chemin du fichier
-     * @param startLine  première ligne à remplacer (1-based, inclus)
-     * @param endLine    dernière ligne à remplacer (1-based, inclus)
-     * @param newContent contenu à insérer (plusieurs lignes séparées par \n)
-     * @return message de succès ou d’erreur
+     * @param filePath   file path
+     * @param startLine  first line to replace (1-based, inclusive)
+     * @param endLine    last line to replace (1-based, inclusive)
+     * @param newContent content to insert (multiple lines separated by \n)
+     * @return success or error message
      */
-    public static String editFile(String filePath, int startLine, int endLine, String newContent) {
+    @Tool(name = "edit_file", description = "Replaces a range of lines (1-based inclusive) with new content")
+    public static String editFile(
+            @Param(name = "filePath", description = "Path of file to modify") String filePath,
+            @Param(name = "startLine", description = "Start line (1-based)") int startLine,
+            @Param(name = "endLine", description = "End line (1-based)") int endLine,
+            @Param(name = "newContent", description = "New content to insert") String newContent) {
         try {
             Path path = Path.of(filePath);
 
@@ -31,16 +39,16 @@ public class FileEditorTool {
                 return "Error: Invalid line range " + startLine + "-" + endLine;
             }
 
-            // Supprimer la plage
+            // Remove the range
             for (int i = endLine; i >= startLine; i--) {
                 lines.remove(i - 1);
             }
 
-            // Insérer le nouveau contenu
-            String[] newLines = newContent.split("\\R"); // split par lignes
+            // Insert the new content
+            String[] newLines = newContent.split("\\R"); // split by lines
             lines.addAll(startLine - 1, List.of(newLines));
 
-            // Réécrire le fichier
+            // Rewrite the file
             Files.write(path, lines);
 
             return "Patch applied successfully to " + filePath;

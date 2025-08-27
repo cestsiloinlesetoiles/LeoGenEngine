@@ -1,4 +1,4 @@
-package com.reglisseforge.utils;
+package com.reglisseforge.agent;
 
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.TextBlock;
@@ -6,15 +6,15 @@ import com.anthropic.models.messages.TextBlock;
 import java.util.stream.Collectors;
 
 public final class AnthropicUtils {
-    /** Concatène tous les TextBlock de la réponse en une seule String. */
+    /** Concatenates all TextBlocks from the response into a single String. */
     public static String getAssistantText(Message message) {
-        return message.content().stream()                  // <-- pas getContent(), c'est content()
+        return message.content().stream()                  // <-- not getContent(), it's content()
                 .flatMap(cb -> cb.text().stream())         // Optional<TextBlock> -> Stream<TextBlock>
                 .map(TextBlock::text)                      // TextBlock -> String
                 .collect(Collectors.joining());
     }
 
-    /** Récupère uniquement le premier TextBlock (pratique pour de petites réponses). */
+    /** Gets only the first TextBlock (useful for small responses). */
     public static String getFirstText(Message message) {
         return message.content().stream()
                 .flatMap(cb -> cb.text().stream())

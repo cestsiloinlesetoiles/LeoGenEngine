@@ -16,7 +16,7 @@ public final class CommandRunner {
 
     public static CommandResult run(String command, File workingDir) {
         try {
-            DefaultExecutor.Builder builder = DefaultExecutor.builder();
+            DefaultExecutor.Builder<?> builder = DefaultExecutor.builder();
             if (workingDir != null) {
                 builder.setWorkingDirectory(workingDir);
             }
@@ -38,7 +38,7 @@ public final class CommandRunner {
 
     public static CommandResult runBash(String bashCommand, File workingDir) {
         try {
-            DefaultExecutor.Builder builder = DefaultExecutor.builder();
+            DefaultExecutor.Builder<?> builder = DefaultExecutor.builder();
             if (workingDir != null) {
                 builder.setWorkingDirectory(workingDir);
             }
