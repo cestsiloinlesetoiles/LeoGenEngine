@@ -130,6 +130,10 @@ public final class LeoPrompt {
             // Can access mappings
             // Can access block.height
             // Executes on-chain after proof verification
+            
+            // CRITICAL RESTRICTION: Cannot re-assign variables from conditional scopes
+            // WRONG: let x = 0; if condition { x = 1; } else { x = 2; }
+            // RIGHT: let x = condition ? 1 : 2;
         }
 
         OPERATORS (PRECEDENCE HIGH TO LOW)
@@ -236,6 +240,11 @@ public final class LeoPrompt {
         • ETYC0372101: Async function called from regular transition
         • ETYC0372120: Type mismatch in operations
         • EPAR0370005: Async function inside transition block
+        • ETYC0372109: CRITICAL - Cannot re-assign variables from conditional scope in async functions
+          → Use ternary operator: let value = condition ? a : b;
+        • EPAR0370005: "found 'if'" - Cannot use if in variable declarations
+          → Use ternary operator instead of if/else blocks
+        • ETYC0372117: Type mismatch with square_root() - returns field, cast to u64 if needed
         """;
     }
 
@@ -388,7 +397,7 @@ public final class LeoPrompt {
 
         CONTROL FLOW PATTERNS
         
-        Conditional Logic:
+        Conditional Logic (REGULAR TRANSITIONS):
         ```leo
         transition calculate_fee(amount: u64) -> u64 {
             let fee: u64 = 0u64;
@@ -402,6 +411,24 @@ public final class LeoPrompt {
             }
             
             return fee;
+        }
+        ```
+        
+        CRITICAL: ASYNC FUNCTIONS - Use Ternary Operators:
+        ```leo
+        async function process_liquidity(public amount_a: u64, public amount_b: u64, public total_lp: u64) {
+            // ✅ CORRECT - Ternary operator for conditional assignment
+            let lp_amount: u64 = total_lp == 0u64 ? 
+                (amount_a * amount_b).square_root() as u64 : 
+                (amount_a * total_lp) / reserve_a;
+                
+            // ❌ WRONG - Cannot re-assign from conditional scope
+            // let lp_amount: u64 = 0u64;
+            // if total_lp == 0u64 {
+            //     lp_amount = (amount_a * amount_b).square_root() as u64;
+            // } else {
+            //     lp_amount = (amount_a * total_lp) / reserve_a;
+            // }
         }
         ```
         
@@ -568,6 +595,27 @@ public final class LeoPrompt {
         3. Use edit_file to fix the errors by replacing the problematic lines
         4. Focus on one error at a time, starting with the first one
         
+        CRITICAL LEO ASYNC FUNCTION RESTRICTIONS:
+        - ETYC0372109: "Cannot re-assign to variable from conditional scope" 
+          → SOLUTION: Use ternary operator instead of if/else for variable assignment
+          → EXAMPLE: let value = condition ? true_val : false_val;
+          → NEVER: let value = 0; if condition { value = x; } else { value = y; }
+        
+        - EPAR0370005: "expected identifier... found 'if'"
+          → SOLUTION: Cannot use if statements in variable declarations
+          → EXAMPLE: let value = condition ? result_a : result_b;
+          → NEVER: let value = if condition { result_a } else { result_b };
+        
+        - EPAR0370005: "expected identifier... found '{'"  
+          → SOLUTION: Ternary operator cannot use blocks, only expressions
+          → EXAMPLE: let value = condition ? simple_expr : other_expr;
+          → NEVER: let value = condition ? { complex_block } : { other_block };
+        
+        - ETYC0372117: "Expected type X but type Y was found"
+          → SOLUTION: Add explicit type casting with 'as' keyword
+          → EXAMPLE: let result: u64 = (field_value as u64);
+          → COMMON: square_root() returns field, cast to u64 if needed
+        
         Common Leo compilation errors and fixes:
         - "expected ; -- found X" - Add missing semicolon
         - "type X is not equal to type Y" - Fix type mismatches in assignments or function calls
@@ -580,9 +628,13 @@ public final class LeoPrompt {
         WORKFLOW:
         1. Read the error message to identify the file and line number
         2. Read the file to understand the context
-        3. Identify the exact issue
-        4. Use edit_file to fix it
-        5. Report what you fixed
+        3. PRIORITIZE CRITICAL ERRORS FIRST:
+           - ETYC0372109 (conditional assignment) → Use ternary operators
+           - EPAR0370005 with 'if' → Use ternary operators
+           - ETYC0372117 (type mismatch) → Add explicit casting
+        4. Identify the exact issue based on error patterns above
+        5. Use edit_file to fix it with the recommended solution
+        6. Report what you fixed and why
         
         Remember: ALWAYS use tools to read and edit files. Never output code directly in your response.
         """;

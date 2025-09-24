@@ -1,11 +1,13 @@
 package com.reglisseforge.tools;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.models.messages.ContentBlock;
@@ -22,21 +24,29 @@ import com.reglisseforge.tools.base.ToolRegistry;
 import com.reglisseforge.utils.AnthropicClientFactory;
 import com.reglisseforge.utils.CommandRunner;
 import com.reglisseforge.utils.LeoPrompt;
+import com.reglisseforge.web.service.StreamEventService;
 
 /**
- * Leo code corrector that uses tools to fix compilation errors
+ * Web-enabled Leo code corrector with WebSocket streaming support
  */
-public class LeoCodeCorrector {
-    private static final Logger logger = LogManager.getLogger(LeoCodeCorrector.class);
+public class WebLeoCodeCorrector {
+    private static final Logger logger = LoggerFactory.getLogger(WebLeoCodeCorrector.class);
     
     private final AnthropicClient client;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
     private final Model model = Model.CLAUDE_4_SONNET_20250514;
+    private final StreamEventService eventService;
+    private final FixHistoryManager fixHistoryManager;
     
-    public LeoCodeCorrector() {
+    // Track errors encountered during correction
+    private final List<String> allErrorsEncountered = new ArrayList<>();
+    
+    public WebLeoCodeCorrector(StreamEventService eventService, FixHistoryManager fixHistoryManager) {
         this.client = AnthropicClientFactory.create();
         this.toolRegistry = new ToolRegistry();
+        this.eventService = eventService;
+        this.fixHistoryManager = fixHistoryManager;
         
         // Register static tools
         registerTools();
@@ -61,47 +71,59 @@ public class LeoCodeCorrector {
     }
     
     /**
-     * Attempts to fix Leo compilation errors using an AI-powered correction loop
-     * 
-     * @param projectPath Path to the Leo project
-     * @param maxAttempts Maximum number of correction attempts (default 20)
-     * @return true if compilation succeeded, false if max attempts reached
+     * Attempts to fix Leo compilation errors with WebSocket streaming
      */
-    public boolean fixCompilationErrors(String projectPath, int maxAttempts) {
+    public boolean fixCompilationErrors(String sessionId, String projectPath, int maxAttempts) {
         logger.info("Starting Leo code correction for project: {}", projectPath);
         
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             logger.info("Correction attempt {}/{}", attempt, maxAttempts);
-            System.out.println("\n" + "━".repeat(60));
-            System.out.println("🔄 CORRECTION ATTEMPT " + attempt + "/" + maxAttempts);
-            System.out.println("━".repeat(60));
+            
+            eventService.sendFixingStarted(sessionId, attempt, maxAttempts);
             
             // Try to build the project
-            System.out.println("🔨 Running leo build...");
+            eventService.sendFixingProgress(sessionId, "🔨 Running leo build...", attempt);
             String buildOutput = buildProject(projectPath);
             
             // Check if build succeeded
             if (buildOutput.contains("✅ Compiled") || buildOutput.contains("Successfully compiled") || 
                 !buildOutput.contains("Error") && !buildOutput.contains("error")) {
+                
                 logger.info("✅ Build succeeded on attempt {}!", attempt);
-                System.out.println("\n🎉 BUILD SUCCEEDED on attempt " + attempt + "!");
+                eventService.sendFixingSuccess(sessionId, attempt);
+                
+                // Record successful solution
+                Path mainLeoFile = Paths.get(projectPath, "src", "main.leo");
+                fixHistoryManager.recordSolution(sessionId, mainLeoFile, buildOutput, attempt, allErrorsEncountered);
+                
                 return true;
             }
             
             logger.info("Build failed, attempting to fix errors...");
             logger.debug("Build output:\n{}", buildOutput);
-            System.out.println("❌ Build failed. Analyzing errors...");
+            
+            eventService.sendFixingProgress(sessionId, "❌ Build failed. Analyzing errors...", attempt);
+            
+            // Add error to tracking list
+            allErrorsEncountered.add("Attempt " + attempt + ": " + buildOutput);
             
             // Use AI to fix the errors
-            boolean fixed = attemptFix(projectPath, buildOutput, attempt);
+            boolean fixed = attemptFix(sessionId, projectPath, buildOutput, attempt, maxAttempts);
             
             if (!fixed) {
                 logger.warn("Failed to apply fixes on attempt {}", attempt);
-                System.out.println("⚠️ Failed to apply fixes on this attempt");
+                eventService.sendFixingProgress(sessionId, "⚠️ Failed to apply fixes on this attempt", attempt);
+            } else {
+                eventService.sendFixingProgress(sessionId, "✅ Fixes applied, checking build...", attempt);
             }
         }
         
         logger.error("❌ Failed to fix compilation errors after {} attempts", maxAttempts);
+        
+        // Record failure
+        String lastError = allErrorsEncountered.isEmpty() ? "Unknown error" : allErrorsEncountered.get(allErrorsEncountered.size() - 1);
+        fixHistoryManager.recordFailure(sessionId, maxAttempts, allErrorsEncountered, lastError);
+        
         return false;
     }
     
@@ -120,8 +142,12 @@ public class LeoCodeCorrector {
         return fullOutput;
     }
     
-    private boolean attemptFix(String projectPath, String errorOutput, int attemptNumber) {
+    private boolean attemptFix(String sessionId, String projectPath, String errorOutput, int attemptNumber, int maxAttempts) {
         try {
+            // Record the attempt before starting fixes
+            Path mainLeoFile = Paths.get(projectPath, "src", "main.leo");
+            List<String> fixesApplied = new ArrayList<>();
+            
             // Build message with system prompt and user message
             MessageCreateParams.Builder builder = MessageCreateParams.builder()
                     .model(model)
@@ -137,23 +163,30 @@ public class LeoCodeCorrector {
             // Add user message with error details
             builder.addUserMessage(LeoPrompt.getLeoCorrectorUserPrompt(projectPath, errorOutput, attemptNumber).text());
             
-            // Run the correction loop
-            Message response = runCorrectionLoop(builder);
+            // Run the correction loop with WebSocket feedback
+            Message response = runCorrectionLoop(sessionId, builder, attemptNumber);
+            
+            // Record the attempt with fixes applied
+            String aiAnalysis = "AI analysis for attempt " + attemptNumber + " - Error: " + errorOutput.substring(0, Math.min(500, errorOutput.length()));
+            fixHistoryManager.recordAttempt(sessionId, attemptNumber, mainLeoFile, errorOutput, aiAnalysis, fixesApplied);
             
             return response != null;
             
         } catch (Exception e) {
             logger.error("Error during correction attempt", e);
+            eventService.sendError(sessionId, "Error during correction: " + e.getMessage());
             return false;
         }
     }
     
-    private Message runCorrectionLoop(MessageCreateParams.Builder builder) {
+    private Message runCorrectionLoop(String sessionId, MessageCreateParams.Builder builder, int attemptNumber) {
         Message lastResponse = null;
         int maxToolTurns = 10; // Max tool turns within a single correction attempt
         
         for (int turn = 0; turn < maxToolTurns; turn++) {
-            System.out.println("  ▶ Tool turn " + (turn + 1) + "/" + maxToolTurns);
+            eventService.sendFixingProgress(sessionId, 
+                String.format("▶ Tool turn %d/%d (attempt %d)", turn + 1, maxToolTurns, attemptNumber), 
+                attemptNumber);
             
             MessageCreateParams request = builder.build();
             Message response = client.messages().create(request);
@@ -165,18 +198,22 @@ public class LeoCodeCorrector {
             if (toolUses.isEmpty()) {
                 // No more tools to call, correction attempt is complete
                 logger.info("Correction attempt complete after {} tool turns", turn + 1);
-                System.out.println("  ✅ Correction attempt complete after " + (turn + 1) + " tool turns");
+                eventService.sendFixingProgress(sessionId, 
+                    String.format("✅ Correction attempt complete after %d tool turns", turn + 1), 
+                    attemptNumber);
                 return response;
             }
             
             logger.info("Executing {} tool calls", toolUses.size());
-            System.out.println("  🔧 Executing " + toolUses.size() + " tool calls...");
+            eventService.sendFixingProgress(sessionId, 
+                String.format("🔧 Executing %d tool calls...", toolUses.size()), 
+                attemptNumber);
             
             // Add assistant message to conversation
             builder.addMessage(response);
             
             // Execute tools and collect results
-            List<ContentBlockParam> toolResults = executeTools(toolUses);
+            List<ContentBlockParam> toolResults = executeTools(sessionId, toolUses, attemptNumber);
             
             // Add tool results as user message
             if (!toolResults.isEmpty()) {
@@ -185,7 +222,9 @@ public class LeoCodeCorrector {
         }
         
         logger.warn("Reached maximum tool turns ({}) in correction loop", maxToolTurns);
-        System.out.println("  ⚠️ Reached maximum tool turns (" + maxToolTurns + ")");
+        eventService.sendFixingProgress(sessionId, 
+            String.format("⚠️ Reached maximum tool turns (%d)", maxToolTurns), 
+            attemptNumber);
         return lastResponse;
     }
     
@@ -207,13 +246,15 @@ public class LeoCodeCorrector {
         return toolUses;
     }
     
-    private List<ContentBlockParam> executeTools(List<ToolUseBlock> toolUses) {
+    private List<ContentBlockParam> executeTools(String sessionId, List<ToolUseBlock> toolUses, int attemptNumber) {
         List<ContentBlockParam> toolResults = new ArrayList<>();
         
         for (ToolUseBlock toolUse : toolUses) {
             try {
                 logger.info("Executing tool: {}", toolUse.name());
-                System.out.println("    → Executing: " + toolUse.name());
+                eventService.sendFixingProgress(sessionId, 
+                    String.format("    → Executing: %s", toolUse.name()), 
+                    attemptNumber);
                 
                 Object result = toolExecutor.executeTool(toolUse);
                 String resultStr = result != null ? result.toString() : "Success";
@@ -225,16 +266,19 @@ public class LeoCodeCorrector {
                         
                 logger.info("Tool result: {}", resultStr);
                 
-                // Show abbreviated result for better UX
-                if (resultStr.length() > 100) {
-                    System.out.println("      ✓ Result: " + resultStr.substring(0, 97) + "...");
-                } else {
-                    System.out.println("      ✓ Result: " + resultStr);
-                }
+                // Send abbreviated result via WebSocket
+                String abbreviatedResult = resultStr.length() > 100 ? 
+                    resultStr.substring(0, 97) + "..." : resultStr;
+                eventService.sendFixingProgress(sessionId, 
+                    String.format("      ✓ Result: %s", abbreviatedResult), 
+                    attemptNumber);
                 
             } catch (Throwable e) {
                 logger.error("Error executing tool: {}", toolUse.name(), e);
-                System.out.println("      ✗ Error: " + e.getMessage());
+                
+                eventService.sendFixingProgress(sessionId, 
+                    String.format("      ✗ Error: %s", e.getMessage()), 
+                    attemptNumber);
                 
                 toolResults.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
                         .toolUseId(toolUse.id())
