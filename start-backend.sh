@@ -1,63 +1,63 @@
 #!/bin/bash
 echo "🚀 Starting LeoForge Backend..."
 
-# Vérifier que la clé API Anthropic est définie
+# Check that the Anthropic API key is set
 if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "❌ Erreur: La variable d'environnement ANTHROPIC_API_KEY n'est pas définie."
-    echo "💡 Veuillez définir votre clé API:"
-    echo "   export ANTHROPIC_API_KEY=\"votre_clé_api_ici\""
+    echo "❌ Error: The ANTHROPIC_API_KEY environment variable is not set."
+    echo "💡 Please set your API key:"
+    echo "   export ANTHROPIC_API_KEY=\"your_api_key_here\""
     exit 1
 fi
 
-echo "✅ Clé API Anthropic détectée"
+echo "✅ Anthropic API key detected"
 
-# Arrêter les processus Spring Boot existants sur le port 8080
-echo "🔍 Recherche de processus backend existants..."
+# Stop existing Spring Boot processes on port 8080
+echo "🔍 Searching for existing backend processes..."
 BACKEND_PID=$(lsof -ti:8080 2>/dev/null)
 if [ ! -z "$BACKEND_PID" ]; then
-    echo "⚠️  Processus backend détecté sur le port 8080 (PID: $BACKEND_PID)"
-    echo "🔥 Arrêt du processus existant..."
+    echo "⚠️  Backend process detected on port 8080 (PID: $BACKEND_PID)"
+    echo "🔥 Stopping existing process..."
     kill -TERM $BACKEND_PID 2>/dev/null
     
-    # Attendre que le processus se termine
+    # Wait for the process to terminate
     for i in {1..10}; do
         if ! kill -0 $BACKEND_PID 2>/dev/null; then
-            echo "✅ Processus backend arrêté avec succès"
+            echo "✅ Backend process stopped successfully"
             break
         fi
-        echo "⏳ Attente de l'arrêt du processus... ($i/10)"
+        echo "⏳ Waiting for the process to stop... ($i/10)"
         sleep 1
     done
     
-    # Force kill si nécessaire
+    # Force kill if necessary
     if kill -0 $BACKEND_PID 2>/dev/null; then
-        echo "⚡ Force kill du processus backend..."
+        echo "⚡ Force killing backend process..."
         kill -KILL $BACKEND_PID 2>/dev/null
         sleep 2
     fi
 else
-    echo "✅ Aucun processus backend existant détecté"
+    echo "✅ No existing backend process detected"
 fi
 
-# Arrêter les processus Maven existants pour ce projet
-echo "🔍 Recherche de processus Maven existants..."
+# Stop existing Maven processes for this project
+echo "🔍 Searching for existing Maven processes..."
 MAVEN_PIDS=$(pgrep -f "maven.*LeoGenEngine" 2>/dev/null)
 if [ ! -z "$MAVEN_PIDS" ]; then
-    echo "⚠️  Processus Maven détectés: $MAVEN_PIDS"
-    echo "🔥 Arrêt des processus Maven existants..."
+    echo "⚠️  Maven processes detected: $MAVEN_PIDS"
+    echo "🔥 Stopping existing Maven processes..."
     echo "$MAVEN_PIDS" | xargs kill -TERM 2>/dev/null
     sleep 3
     
-    # Force kill si nécessaire
+    # Force kill if necessary
     REMAINING_MAVEN=$(pgrep -f "maven.*LeoGenEngine" 2>/dev/null)
     if [ ! -z "$REMAINING_MAVEN" ]; then
-        echo "⚡ Force kill des processus Maven restants..."
+        echo "⚡ Force killing remaining Maven processes..."
         echo "$REMAINING_MAVEN" | xargs kill -KILL 2>/dev/null
     fi
-    echo "✅ Processus Maven arrêtés"
+    echo "✅ Maven processes stopped"
 else
-    echo "✅ Aucun processus Maven existant détecté"
+    echo "✅ No existing Maven processes detected"
 fi
 
-echo "🚀 Démarrage du nouveau backend..."
+echo "🚀 Starting new backend..."
 mvn spring-boot:run -Dspring-boot.run.mainClass="com.reglisseforge.WebApplication"

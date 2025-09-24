@@ -87,3 +87,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Project history and local Leo workspace
+fixhistory/
+leoworkspace/

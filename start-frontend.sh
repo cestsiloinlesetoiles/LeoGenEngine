@@ -1,57 +1,57 @@
 #!/bin/bash
 echo "⚛️  Starting LeoForge Frontend..."
 
-# Arrêter les processus Vite/Node existants sur les ports 5173/5174
-echo "🔍 Recherche de processus frontend existants..."
+# Stop existing Vite/Node processes on ports 5173/5174
+echo "🔍 Searching for existing frontend processes..."
 
-# Vérifier les ports couramment utilisés par Vite (5173, 5174, 3000)
+# Check common ports used by Vite (5173, 5174, 3000)
 FRONTEND_PORTS=(5173 5174 3000 4173)
 for port in "${FRONTEND_PORTS[@]}"; do
     FRONTEND_PID=$(lsof -ti:$port 2>/dev/null)
     if [ ! -z "$FRONTEND_PID" ]; then
-        echo "⚠️  Processus frontend détecté sur le port $port (PID: $FRONTEND_PID)"
-        echo "🔥 Arrêt du processus existant..."
+        echo "⚠️  Frontend process detected on port $port (PID: $FRONTEND_PID)"
+        echo "🔥 Stopping existing process..."
         kill -TERM $FRONTEND_PID 2>/dev/null
         
-        # Attendre que le processus se termine
+        # Wait for the process to terminate
         for i in {1..5}; do
             if ! kill -0 $FRONTEND_PID 2>/dev/null; then
-                echo "✅ Processus frontend sur le port $port arrêté avec succès"
+                echo "✅ Frontend process on port $port stopped successfully"
                 break
             fi
-            echo "⏳ Attente de l'arrêt du processus... ($i/5)"
+            echo "⏳ Waiting for the process to stop... ($i/5)"
             sleep 1
         done
         
-        # Force kill si nécessaire
+        # Force kill if necessary
         if kill -0 $FRONTEND_PID 2>/dev/null; then
-            echo "⚡ Force kill du processus frontend..."
+            echo "⚡ Force killing frontend process..."
             kill -KILL $FRONTEND_PID 2>/dev/null
             sleep 1
         fi
     fi
 done
 
-# Arrêter les processus Node/NPM existants pour ce projet
-echo "🔍 Recherche de processus Node/NPM existants..."
+# Stop existing Node/NPM processes for this project
+echo "🔍 Searching for existing Node/NPM processes..."
 NODE_PIDS=$(pgrep -f "node.*vite\|npm.*dev\|vite.*dev" 2>/dev/null)
 if [ ! -z "$NODE_PIDS" ]; then
-    echo "⚠️  Processus Node/NPM détectés: $NODE_PIDS"
-    echo "🔥 Arrêt des processus Node/NPM existants..."
+    echo "⚠️  Node/NPM processes detected: $NODE_PIDS"
+    echo "🔥 Stopping existing Node/NPM processes..."
     echo "$NODE_PIDS" | xargs kill -TERM 2>/dev/null
     sleep 2
     
-    # Force kill si nécessaire
+    # Force kill if necessary
     REMAINING_NODE=$(pgrep -f "node.*vite\|npm.*dev\|vite.*dev" 2>/dev/null)
     if [ ! -z "$REMAINING_NODE" ]; then
-        echo "⚡ Force kill des processus Node restants..."
+        echo "⚡ Force killing remaining Node processes..."
         echo "$REMAINING_NODE" | xargs kill -KILL 2>/dev/null
     fi
-    echo "✅ Processus Node/NPM arrêtés"
+    echo "✅ Node/NPM processes stopped"
 else
-    echo "✅ Aucun processus Node/NPM existant détecté"
+    echo "✅ No existing Node/NPM processes detected"
 fi
 
-echo "🚀 Démarrage du nouveau frontend..."
+echo "🚀 Starting new frontend..."
 cd frontend
 npm run dev
