@@ -1,6 +1,8 @@
 package com.reglisseforge.tools;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,13 +35,18 @@ public class WebLeoCodeCorrector {
     private final AnthropicClient client;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
-    private final Model model = Model.CLAUDE_3_7_SONNET_LATEST;
+    private final Model model = Model.CLAUDE_4_SONNET_20250514;
     private final StreamEventService eventService;
+    private final FixHistoryManager fixHistoryManager;
     
-    public WebLeoCodeCorrector(StreamEventService eventService) {
+    // Track errors encountered during correction
+    private final List<String> allErrorsEncountered = new ArrayList<>();
+    
+    public WebLeoCodeCorrector(StreamEventService eventService, FixHistoryManager fixHistoryManager) {
         this.client = AnthropicClientFactory.create();
         this.toolRegistry = new ToolRegistry();
         this.eventService = eventService;
+        this.fixHistoryManager = fixHistoryManager;
         
         // Register static tools
         registerTools();
@@ -84,6 +91,11 @@ public class WebLeoCodeCorrector {
                 
                 logger.info("✅ Build succeeded on attempt {}!", attempt);
                 eventService.sendFixingSuccess(sessionId, attempt);
+                
+                // Record successful solution
+                Path mainLeoFile = Paths.get(projectPath, "src", "main.leo");
+                fixHistoryManager.recordSolution(sessionId, mainLeoFile, buildOutput, attempt, allErrorsEncountered);
+                
                 return true;
             }
             
@@ -91,6 +103,9 @@ public class WebLeoCodeCorrector {
             logger.debug("Build output:\n{}", buildOutput);
             
             eventService.sendFixingProgress(sessionId, "❌ Build failed. Analyzing errors...", attempt);
+            
+            // Add error to tracking list
+            allErrorsEncountered.add("Attempt " + attempt + ": " + buildOutput);
             
             // Use AI to fix the errors
             boolean fixed = attemptFix(sessionId, projectPath, buildOutput, attempt, maxAttempts);
@@ -104,6 +119,11 @@ public class WebLeoCodeCorrector {
         }
         
         logger.error("❌ Failed to fix compilation errors after {} attempts", maxAttempts);
+        
+        // Record failure
+        String lastError = allErrorsEncountered.isEmpty() ? "Unknown error" : allErrorsEncountered.get(allErrorsEncountered.size() - 1);
+        fixHistoryManager.recordFailure(sessionId, maxAttempts, allErrorsEncountered, lastError);
+        
         return false;
     }
     
@@ -124,6 +144,10 @@ public class WebLeoCodeCorrector {
     
     private boolean attemptFix(String sessionId, String projectPath, String errorOutput, int attemptNumber, int maxAttempts) {
         try {
+            // Record the attempt before starting fixes
+            Path mainLeoFile = Paths.get(projectPath, "src", "main.leo");
+            List<String> fixesApplied = new ArrayList<>();
+            
             // Build message with system prompt and user message
             MessageCreateParams.Builder builder = MessageCreateParams.builder()
                     .model(model)
@@ -141,6 +165,10 @@ public class WebLeoCodeCorrector {
             
             // Run the correction loop with WebSocket feedback
             Message response = runCorrectionLoop(sessionId, builder, attemptNumber);
+            
+            // Record the attempt with fixes applied
+            String aiAnalysis = "AI analysis for attempt " + attemptNumber + " - Error: " + errorOutput.substring(0, Math.min(500, errorOutput.length()));
+            fixHistoryManager.recordAttempt(sessionId, attemptNumber, mainLeoFile, errorOutput, aiAnalysis, fixesApplied);
             
             return response != null;
             

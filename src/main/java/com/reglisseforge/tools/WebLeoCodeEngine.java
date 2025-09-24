@@ -35,13 +35,15 @@ public class WebLeoCodeEngine {
     
     private static final Logger logger = LoggerFactory.getLogger(WebLeoCodeEngine.class);
     
-    private final Model model = Model.CLAUDE_3_7_SONNET_LATEST;
+    private final Model model = Model.CLAUDE_4_SONNET_20250514;
     private final AnthropicClient client;
     private final StreamEventService eventService;
+    private final FixHistoryManager fixHistoryManager;
     
     public WebLeoCodeEngine(StreamEventService eventService) {
         this.client = AnthropicClientFactory.create();
         this.eventService = eventService;
+        this.fixHistoryManager = new FixHistoryManager();
     }
 
     /**
@@ -61,6 +63,9 @@ public class WebLeoCodeEngine {
             String leoProjectName = projectName.toLowerCase().replaceAll("\\s+", "_");
             
             eventService.sendInfo(sessionId, "Creating Leo project structure...");
+            
+            // Initialize fix history tracking
+            fixHistoryManager.initializeSession(sessionId, leoProjectName, projectDescription, workspacePath);
             
             // Create Leo project skeleton
             String command = "leo new " + leoProjectName;
@@ -157,6 +162,9 @@ public class WebLeoCodeEngine {
             eventService.sendInfo(sessionId, "✅ Initial code generation completed");
             eventService.sendInfo(sessionId, "📄 Code saved to: " + outputFile.toAbsolutePath());
             
+            // Record initial generation in fix history
+            fixHistoryManager.recordInitialGeneration(sessionId, outputFile, "Initial Leo code generated successfully");
+            
             // Fix invalid admin addresses
             fixInvalidAdminAddresses(sessionId, outputFile);
             
@@ -246,6 +254,11 @@ public class WebLeoCodeEngine {
         if (isBuildSuccessful(buildOutput)) {
             eventService.sendBuildSuccess(sessionId);
             eventService.sendProjectComplete(sessionId, projectPath);
+            
+            // Record successful solution (no attempts needed)
+            Path mainLeoFile = Paths.get(projectPath, "src", "main.leo");
+            fixHistoryManager.recordSolution(sessionId, mainLeoFile, buildOutput, 0, List.of());
+            
             return true;
         }
         
@@ -253,8 +266,8 @@ public class WebLeoCodeEngine {
         eventService.sendBuildFailed(sessionId, buildOutput);
         eventService.sendInfo(sessionId, "❌ Initial build failed. Starting automatic correction...");
         
-        // Use LeoCodeCorrector with WebSocket integration
-        WebLeoCodeCorrector corrector = new WebLeoCodeCorrector(eventService);
+        // Use LeoCodeCorrector with WebSocket integration and fix history tracking
+        WebLeoCodeCorrector corrector = new WebLeoCodeCorrector(eventService, fixHistoryManager);
         boolean success = corrector.fixCompilationErrors(sessionId, projectPath, maxAttempts);
         
         if (success) {

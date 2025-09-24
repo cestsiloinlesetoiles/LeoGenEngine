@@ -27,7 +27,7 @@ import com.reglisseforge.utils.LeoPrompt;
 public class LeoCodeEngine {
 
     
-    Model model = Model.CLAUDE_3_7_SONNET_LATEST;
+    Model model = Model.CLAUDE_4_SONNET_20250514;
 
     AnthropicClient client;
     String projectPath;

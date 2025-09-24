@@ -32,7 +32,7 @@ public class LeoCodeCorrector {
     private final AnthropicClient client;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
-    private final Model model = Model.CLAUDE_3_7_SONNET_LATEST;
+    private final Model model = Model.CLAUDE_4_SONNET_20250514;
     
     public LeoCodeCorrector() {
         this.client = AnthropicClientFactory.create();
