@@ -1,3 +1,52 @@
+# Frontend modules and build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/.parcel-cache/
+frontend/.turbo/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+
+# Java / Maven build outputs
+target/
+*.class
+*.jar
+*.war
+*.ear
+mvnw.cmd
+.mvn/wrapper/maven-wrapper.jar
+
+# Leo workspace generated files
+leoworkspace/**/build/
+leoworkspace/**/outputs/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+*.swp
+*.swo
+
+# Logs and OS artifacts
+*.log
+.DS_Store
+Thumbs.db
 leoworkspace/*
 
 target/
